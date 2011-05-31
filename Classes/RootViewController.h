@@ -82,6 +82,8 @@
 @property (nonatomic, retain) NSString *anchorFromURL;
 
 @property (nonatomic, retain) UIScrollView *scrollView;
+//Navigation Bar
+@property (nonatomic, retain) UIWebView *navigation;
 @property (nonatomic, retain) NSMutableArray *pageSpinners;
 
 @property (nonatomic, retain) UIWebView *prevPage;
@@ -90,12 +92,17 @@
 
 @property int currentPageNumber;
 
+//Navigation Bar
+@property int pageWidth;
+@property int pageHeight;
+
 @property (nonatomic, retain) NSString *URLDownload;
 
 // ****** INIT
 - (void)checkPageSize;
 - (void)setPageSize:(NSString *)orientation;
 - (void)initBook:(NSString *)path;
+- (void)initPageSize;
 
 // ****** LOADING
 - (BOOL)changePage:(int)page;

@@ -36,8 +36,8 @@
 
 // LOADER STYLE
 // Configure this to change the color of the loader
-#define SCROLLVIEW_BGCOLOR whiteColor
-#define PAGE_NUMBERS_COLOR blackColor
+#define SCROLLVIEW_BGCOLOR blackColor
+#define PAGE_NUMBERS_COLOR whiteColor
 #define PAGE_NUMBERS_ALPHA 0.2
 
 // PINCH-TO-ZOOM
@@ -82,6 +82,8 @@
 //	@"Landscape" - Book is available only in landscape orientation
 #define	AVAILABLE_ORIENTATION @"Any"
 
+
+
 //  ==========================================================================================
 
 @implementation RootViewController
@@ -96,6 +98,9 @@
 @synthesize scrollView;
 @synthesize pageSpinners;
 
+// ##### Navigation Bar
+@synthesize navigation;
+
 @synthesize prevPage;
 @synthesize currPage;
 @synthesize nextPage;
@@ -103,6 +108,10 @@
 @synthesize currentPageNumber;
 
 @synthesize URLDownload;
+
+// ##### Navigation Bar
+@synthesize pageWidth;
+@synthesize pageHeight;
 
 // ****** INIT
 - (id)init {
@@ -175,7 +184,7 @@
 			[self initBook:bundleBookPath];
 		} /* else {
 		   Do something if there are no books available to show...   
-		} /**/
+		} */
 	}
 	
 	return self;
@@ -298,6 +307,11 @@
 		[self initBook:bundleBookPath];
 	}
 }
+
+- (void)initPageSize {
+
+}
+
 - (void)initPageNumbersForPages:(int)count {
 	pageSpinners = [[NSMutableArray alloc] initWithCapacity:count];
 	
@@ -307,7 +321,7 @@
 		spinner.backgroundColor = [UIColor clearColor];
 		
 		CGRect frame = spinner.frame;
-		frame.origin.x = pageWidth * i + (pageWidth + frame.size.width) / 2 - 40;
+		frame.origin.x = pageWidth * i + (pageWidth + frame.size.width) / 2 - 20;
 		frame.origin.y = (pageHeight + frame.size.height) / 2;
 		spinner.frame = frame;
 		
@@ -316,22 +330,52 @@
 		[spinner release];
 		
 		// ****** Numbers
-		UILabel *label = [[UILabel alloc] initWithFrame:CGRectMake(pageWidth * i + (pageWidth) / 2, pageHeight / 2 - 6, 100, 50)];
+		NSUInteger width = pageWidth * 0.6;
+		UILabel *label = [[UILabel alloc] initWithFrame:CGRectMake(pageWidth * i + (pageWidth) / 2 - (width/2), pageHeight / 2 + 20, width, 100)];
 		label.backgroundColor = [UIColor clearColor];
 		label.textColor = [UIColor PAGE_NUMBERS_COLOR];
 		label.alpha = PAGE_NUMBERS_ALPHA;
+		label.numberOfLines = 0;
+        label.lineBreakMode = UILineBreakModeWordWrap;
 				
-		NSString *labelText = [[NSString alloc] initWithFormat:@"%d", i + 1];
-		label.font = [UIFont fontWithName:@"Helvetica" size:40.0];
-		label.textAlignment = UITextAlignmentLeft;
+		//NSString *labelText = [[NSString alloc] initWithFormat:@"%d", i + 1];
+		
+		// Read title tag --------
+		// REGEXP for matching title
+        NSRegularExpression *titleMatcher = [NSRegularExpression regularExpressionWithPattern:@"<title>(.*)</title>" 
+                                                                                      options:NSRegularExpressionCaseInsensitive 
+                                                                                        error:NULL];
+        // read the file content
+        NSString *fileContents = [NSString stringWithContentsOfFile:[self.pages objectAtIndex: i] encoding:NSUTF8StringEncoding error:NULL];
+        
+        // parse file
+        //NSArray *matches = [titleMatcher matchesInString:fileContents options:0 range:NSMakeRange(0, [fileContents length])];
+        //NSString *numberOfMatches = [[NSNumber numberWithInteger:[matches count]] stringValue];
+        
+        //NSRange match = [[matches objectAtIndex:1] range];
+        NSTextCheckingResult *matchResult = [titleMatcher firstMatchInString:fileContents options:0 range:NSMakeRange(0, [fileContents length])];
+        NSRange match = [matchResult rangeAtIndex:1];
+        
+        
+        //NSString *labelText = [@"Lade Inhalt…" stringByAppendingString:numberOfMatches];
+        NSString *labelText = @"Loading…";
+        if (! NSEqualRanges(match, NSMakeRange(NSNotFound, 0))) {
+            labelText = [@"Loading…\n" stringByAppendingString:[fileContents substringWithRange:match]];
+        }
+		// Read title tag end --------
+		
+		label.font = [UIFont fontWithName:@"Helvetica" size:15.0];
+		label.textAlignment = UITextAlignmentCenter;
 		label.text = labelText;
 		//label.backgroundColor = [UIColor redColor];
-		[labelText release];
+		//[labelText release];
 		
 		[[self scrollView] addSubview:label];
 		[label release];
 	}
 }
+
+
 
 // ****** LOADING
 - (BOOL)changePage:(int)page {
@@ -414,7 +458,7 @@
 			
 			// Preload
 			[self loadSlot:-1 withPage:currentPageNumber - 1];
-		} /**/
+		} */
 	}	
 }
 - (BOOL)loadSlot:(int)slot withPage:(int)page {
@@ -438,13 +482,13 @@
 	/*if (webView != nil) {
 		[webView removeFromSuperview];
 		[webView release];
-	} /**/
+	} */
 	
 	// ***** CREATE
 	/*webView = [[UIWebView alloc] initWithFrame:frame];
 	webView.delegate = self;
 	[[self view] addSubview:webView];
-	[[self view] sendSubviewToBack:webView]; /**/
+	[[self view] sendSubviewToBack:webView]; */
 	[self loadWebView:webView withPage:page];
 	[self spinnerForPage:page isAnimating:YES]; // spinner YES
 	
@@ -455,7 +499,7 @@
 		self.currPage = webView;
 	} else if (slot == +1) {
 		self.nextPage = webView;
-	} /**/
+	} */
 	
 	return NO;
 }
@@ -532,6 +576,8 @@
 	// Sent before a web view begins loading content.
 }
 - (void)webViewDidFinishLoad:(UIWebView *)webView {
+	
+	if (webView == navigation) {} else {
 	// Sent after a web view finishes loading content.	
 	
 	if (webView == currPage) {
@@ -552,9 +598,23 @@
 			
 			currentPageFirstLoading = NO;
 		}
+	}
 		
-		// Handle saved hash reference (if any)
-		[self handleAnchor:NO];
+		// If is the first time i load something in the currPage web view...
+		if (webView == currPage && currentPageFirstLoading) {
+			NSLog(@"(1) currPage finished first loading");
+		
+			// ...check if there is a saved starting scroll index and set it
+			NSString *currPageScrollIndex = [[NSUserDefaults standardUserDefaults] objectForKey:@"lastScrollIndex"];
+			if (currPageScrollIndex != nil) [self goDownInPage:currPageScrollIndex animating:NO];
+			
+			//[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(onTouch:) name:@"onTouch" object:nil];
+			
+			//[self loadSlot:+1 withPage:currentPageNumber + 1];
+			//[self loadSlot:-1 withPage:currentPageNumber - 1];
+			
+			currentPageFirstLoading = NO;
+			
 	}
 	
 	// /!\ hack to make it load at the right time and not too early
@@ -564,7 +624,8 @@
 	
 	[self spinnerForPage:currentPageNumber isAnimating:NO]; // spinner YES
 	[self performSelector:@selector(revealWebView:) withObject:webView afterDelay:0.1]; // This seems fixing the WebView-Flash-Of-Old-Content-webBug    
-}
+	}
+	}
 - (void)webView:(UIWebView *)webView didFailLoadWithError:(NSError *)error {
 	// Sent if a web view failed to load content.
 	if (webView == prevPage)
@@ -575,6 +636,19 @@
 		NSLog(@"nextPage failed to load content with error: %@", error);
 }
 - (BOOL)webView:(UIWebView *)webView shouldStartLoadWithRequest:(NSURLRequest *)request navigationType:(UIWebViewNavigationType)navigationType {
+	
+	//LAKER Modification
+	NSURL *url = [request URL];
+	
+	if ([[url lastPathComponent] isEqualToString:@"navigation.htm"]) {
+		return YES;
+	}
+	
+	if (navigation == webView) {
+		[self performSelector:@selector(toggleNavigationBar) withObject:nil];
+	}
+	
+	
 	// Sent before a web view begins loading content, useful to trigger actions before the WebView.	
 	if (currentPageIsDelayingLoading) {
 		
@@ -600,8 +674,10 @@
 				self.anchorFromURL = [url fragment];
 				NSString *file = [[url relativePath] stringByReplacingPercentEscapesUsingEncoding:NSUTF8StringEncoding];
 				int page = (int)[pages indexOfObject:file] + 1;
-				if (![self changePage:page]) {
-					[self handleAnchor:NO];
+				if ([self changePage:page]) {
+					stackedScrollingAnimations++;
+					[scrollView scrollRectToVisible:[self frameForPage:currentPageNumber] animated:YES];
+					[self gotoPageDelayer];
 				}
 				
 			} else if ([[url scheme] isEqualToString:@"book"]) {
@@ -645,6 +721,7 @@
 	}
 }
 - (void)webView:(UIWebView *)webView hidden:(BOOL)status animating:(BOOL)animating {
+	if (webView == navigation) {} {
 	NSLog(@"- - hidden:%d animating:%d", status, animating);
 	
 	if (animating) {
@@ -664,6 +741,7 @@
 		webView.alpha = 1.0;
 		webView.hidden = NO;
 	}
+	}
 }
 - (void)revealWebView:(UIWebView *)webView {
 	[self webView:webView hidden:NO animating:YES];  // Delayed run to fix the WebView-Flash-Of-Old-Content-Bug
@@ -680,25 +758,41 @@
 	// ...and swipe or scroll the page.
 	if (CGRectContainsPoint(upTapArea, tapPoint)) {
 		NSLog(@" /\\ TAP up!");
-		[self goUpInPage:@"1004" animating:YES];
+		//[self goUpInPage:@"1004" animating:YES];
 	} else if (CGRectContainsPoint(downTapArea, tapPoint)) {
 		NSLog(@" \\/ TAP down!");
-		[self goDownInPage:@"1004" animating:YES];
+		//[self goDownInPage:@"1004" animating:YES];
 	} else if (CGRectContainsPoint(leftTapArea, tapPoint) || CGRectContainsPoint(rightTapArea, tapPoint)) {
 		int page = 0;
 		if (CGRectContainsPoint(leftTapArea, tapPoint)) {
 			NSLog(@"<-- TAP left!");
-			page = currentPageNumber-1;
+			//page = currentPageNumber-1;
 		} else if (CGRectContainsPoint(rightTapArea, tapPoint)) {
 			NSLog(@"--> TAP right!");
-			page = currentPageNumber+1;
+			//page = currentPageNumber+1;
 		}
 		
-        [self changePage:page];
+		if ([self changePage:page]) {
+			[self hideStatusBar];
+			// While we are tapping, we don't want scrolling event to get in the way
+			scrollView.scrollEnabled = NO;
+			stackedScrollingAnimations++;
+			[scrollView scrollRectToVisible:[self frameForPage:currentPageNumber] animated:YES];
+			[self gotoPageDelayer];
+		}
+	} else {
+		//		[self performSelector:@selector(toggleNavigationBar) withObject:nil afterDelay:0.5];
+		
+		if (touch.tapCount == 2)
+		{
+			[self performSelector:@selector(toggleNavigationBar) withObject:nil];
+			
+			
+		}
+		
+        //[self changePage:page];
+    }
         
-	} else if (touch.tapCount == 2) {
-		[self performSelector:@selector(toggleStatusBar) withObject:nil];
-	}
 }
 - (void)userDidScroll:(UITouch *)touch {
 	NSLog(@"User did scroll");
@@ -811,6 +905,90 @@
 	discardNextStatusBarToggle = discardToggle;
 	[[UIApplication sharedApplication] setStatusBarHidden:YES withAnimation:UIStatusBarAnimationSlide];
 }
+	
+	
+	// ****** NAVIGATION BAR
+	- (void)toggleNavigationBar {
+		
+		if(navigation == nil)
+		{
+			// setup the navigation bar if it doesn't exist yet
+			NSString *path =	[NSString stringWithFormat:@"%@/%@", [[NSBundle mainBundle] resourcePath], @"book/navigation.htm"];
+			if ([[NSFileManager defaultManager] fileExistsAtPath:path]) {
+				navigation = [[UIWebView alloc] initWithFrame:CGRectMake(0, self.pageHeight,self.pageWidth, 200)];
+				
+				// bouncing oben und unten ausschalten
+				for (id subview in navigation.subviews)
+					if ([[subview class] isSubclassOfClass: [UIScrollView class]])
+						((UIScrollView *)subview).bounces = NO;
+				
+				// set a clear background, so users can define what it looks like
+				[navigation setOpaque:NO];
+				navigation.backgroundColor = [UIColor blackColor];
+				navigation.hidden = YES;
+				
+				NSLog(@"[+] Loading navigation");
+				[navigation loadRequest:[NSURLRequest requestWithURL:[NSURL fileURLWithPath:path]]];
+				navigation.delegate = self;
+				[[self view] addSubview:navigation];
+				[[self view] sendSubviewToBack:navigation];
+			}
+		}
+		
+		if(navigation != nil)
+		{
+			if (navigation.hidden == YES)
+			{
+				//navigation.hidden = NO;
+				// fade the navigation view in
+				[UIView animateWithDuration:0.3
+								 animations:^{
+									 navigation.hidden = NO;
+									 scrollView.frame = CGRectMake(0, 0, self.pageWidth, self.pageHeight - 200);
+									 navigation.frame = CGRectMake(0,self.pageHeight - 200,self.pageWidth, 200);
+								 }
+								 completion:^(BOOL finished){
+									 
+								 }];
+				
+				/*
+				 [UIView beginAnimations:@"showNavigation" context:nil]; {
+				 [UIView setAnimationDuration:0.3];
+				 self.scrollView.frame = CGRectMake(0, 0, self.pageWidth, self.pageHeight - 200);
+				 navigation.frame = CGRectMake(0,self.pageHeight - 200,self.pageWidth, 200);
+				 }
+				 [UIView commitAnimations];
+				 */
+			}
+			else {
+				[UIView animateWithDuration:0.3
+								 animations:^{
+									 scrollView.frame = CGRectMake(0, 0, self.pageWidth, self.pageHeight);
+									 navigation.frame = CGRectMake(0,self.pageHeight,self.pageWidth, 200);
+								 }
+								 completion:^(BOOL finished){
+									 navigation.hidden = YES;
+								 }];
+				
+				// disable the navigation bar
+				/*
+				 [UIView beginAnimations:@"showNavigation" context:nil]; {
+				 [UIView setAnimationDuration:0.3];
+				 self.scrollView.frame = CGRectMake(0, 0, self.pageWidth, self.pageHeight);
+				 self.navigation.frame = CGRectMake(0,self.pageHeight,self.pageWidth, 200);
+				 //self.navigation = nil;
+				 navigation.hidden = YES;
+				 }
+				 [UIView commitAnimations];
+				 */
+			}
+		}
+	}
+	
+	
+	
+	
+	
 
 // ****** DOWNLOAD NEW BOOKS
 - (void)downloadBook:(NSNotification *)notification {
@@ -913,7 +1091,7 @@
 		[self initBook:destinationPath];
 	} /* else {
 	   Do something if it was not possible to write the book file on the iPhone/iPad file system...
-	} /**/
+	} */
 }
 
 // ****** SYSTEM
@@ -963,6 +1141,7 @@
 	[self getPageHeight];
 	[self resetScrollView];
     [currPage setNeedsDisplay];
+	[currPage stringByEvaluatingJavaScriptFromString:@"var e = document.createEvent('Events'); e.initEvent('orientationchange', true, false); document.dispatchEvent(e);"];  
 }
 - (void)didReceiveMemoryWarning {
 	// Releases the view if it doesn't have a superview.
