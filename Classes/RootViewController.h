@@ -31,6 +31,8 @@
 
 
 #import <UIKit/UIKit.h>
+#import "IndexViewController.h"
+
 
 @class Downloader;
 
@@ -72,6 +74,8 @@
 	Downloader *downloader;
 	
 	UIAlertView *feedbackAlert;
+    
+    IndexViewController *indexViewController;
 }
 
 @property (nonatomic, retain) NSString *documentsBookPath;
@@ -105,6 +109,7 @@
 - (void)initPageSize;
 
 // ****** LOADING
+- (NSDictionary*)loadManifest:(NSString*)file;
 - (BOOL)changePage:(int)page;
 - (void)gotoPageDelayer;
 - (void)gotoPage;

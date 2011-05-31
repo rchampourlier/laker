@@ -33,6 +33,7 @@
 #import "RootViewController.h"
 #import "Downloader.h"
 #import "SSZipArchive.h"
+#import "NSDictionary_JSONExtensions.h"
 
 // LOADER STYLE
 // Configure this to change the color of the loader
@@ -82,7 +83,7 @@
 //	@"Landscape" - Book is available only in landscape orientation
 #define	AVAILABLE_ORIENTATION @"Any"
 
-
+#define INDEX_FILE_NAME @"index.html"
 
 //  ==========================================================================================
 
@@ -176,9 +177,14 @@
 	
 	self.documentsBookPath = [documentsPath stringByAppendingPathComponent:@"book"];
 	self.bundleBookPath = [[NSBundle mainBundle] pathForResource:@"book" ofType:nil];
+    
+    // ****** INDEX WEBVIEW INIT
+    indexViewController = [[IndexViewController alloc] initWithBookBundlePath:self.bundleBookPath documentsBookPath:self.documentsBookPath fileName:INDEX_FILE_NAME webViewDelegate:self];
+    
+    [[self view] addSubview:indexViewController.view];
 	
 	if ([[NSFileManager defaultManager] fileExistsAtPath:documentsBookPath]) {
-		[self initBook:documentsBookPath];
+        [self initBook:documentsBookPath];
 	} else {
 		if ([[NSFileManager defaultManager] fileExistsAtPath:bundleBookPath]) {
 			[self initBook:bundleBookPath];
@@ -193,7 +199,7 @@
 	if ([AVAILABLE_ORIENTATION isEqualToString:@"Portrait"] || [AVAILABLE_ORIENTATION isEqualToString:@"Landscape"]) {
 		[self setPageSize:AVAILABLE_ORIENTATION];
 	} else {
-		UIDeviceOrientation orientation = [[UIDevice currentDevice] orientation];
+		UIDeviceOrientation orientation = [self interfaceOrientation];
 		// WARNING! Seems like checking [[UIDevice currentDevice] orientation] against "UIInterfaceOrientationPortrait" is broken (return FALSE with the device in portrait orientation)
 		// Safe solution: always check if the device is in landscape orientation, if FALSE then it's in portrait.
 		if (orientation == UIInterfaceOrientationLandscapeLeft || orientation == UIInterfaceOrientationLandscapeRight)
@@ -258,7 +264,7 @@
 	
 	NSArray *dirContent = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:path error:nil];
 	for (NSString *fileName in dirContent) {
-		if ([[fileName pathExtension] isEqualToString:@"html"])
+		if ([[fileName pathExtension] isEqualToString:@"html"] && ![fileName isEqualToString:INDEX_FILE_NAME])
 			[self.pages addObject:[path stringByAppendingPathComponent:fileName]];
 	}
 		
@@ -291,7 +297,8 @@
 		[scrollView addSubview:currPage];
 		//[scrollView addSubview:nextPage];
 		[self loadSlot:0 withPage:currentPageNumber];
-		
+        [indexViewController loadContentFromBundle:[path isEqualToString:bundleBookPath]];
+        
 	} else {
 		
 		[[NSFileManager defaultManager] removeItemAtPath:path error:NULL];
@@ -378,6 +385,35 @@
 
 
 // ****** LOADING
+- (NSDictionary*)loadManifest:(NSString*)file {
+    /****************************************************************************************************
+	 * Reads a JSON file from Application Bundle to a NSDictionary.
+     *
+     * Requires TouchJSON with the inclusion of: #import "NSDictionary_JSONExtensions.h"
+     *
+     * Use normal NSDictionary and NSArray lookups to find elements.
+     *   [json objectForKey:@"name"]
+     *   [[json objectForKey:@"items"] objectAtIndex:1]
+	 */
+    NSDictionary *ret;
+    
+    NSString *filePath = [[NSBundle mainBundle] pathForResource:file ofType:@"json"];  
+    if (filePath) {  
+        NSString *fileJSON = [NSString stringWithContentsOfFile:filePath encoding:NSUTF8StringEncoding error:nil];
+        
+        NSError *e = NULL;
+        ret = [NSDictionary dictionaryWithJSONString:fileJSON error:&e];
+    }
+    
+    /* // Testing logs
+     NSLog(@"%@", e);
+     NSLog(@"%@", ret);
+     
+     NSLog(@"Lookup, string: %@", [ret objectForKey:@"title"]);
+     NSLog(@"Lookup, sub-array: %@", [[ret objectForKey:@"pages"] objectAtIndex:1]); */
+    
+    return ret;
+}
 - (BOOL)changePage:(int)page {
 
 	BOOL pageChanged = NO;
@@ -666,7 +702,10 @@
 		// ****** Handle URI schemes
 		if (url) {
 			// Existing, checking schemes...
-			
+			if([[url lastPathComponent] isEqualToString:INDEX_FILE_NAME]){
+                NSLog(@"Matches index file name.");
+                return YES; // Let the index view load
+            }
 			if ([[url scheme] isEqualToString:@"file"]) {
 				// ****** Handle: file://
 				NSLog(@"file:// ->");
@@ -895,6 +934,8 @@
 		NSLog(@"TOGGLE status bar");
 		UIApplication *sharedApplication = [UIApplication sharedApplication];
 		[sharedApplication setStatusBarHidden:!sharedApplication.statusBarHidden withAnimation:UIStatusBarAnimationSlide];
+        if(![indexViewController isDisabled]) 
+            [indexViewController setIndexViewHidden:![indexViewController isIndexViewHidden] withAnimation:YES];
 	}
 }
 - (void)hideStatusBar {
@@ -904,6 +945,8 @@
 	NSLog(@"HIDE status bar %@", (discardToggle ? @"discarding toggle" : @""));
 	discardNextStatusBarToggle = discardToggle;
 	[[UIApplication sharedApplication] setStatusBarHidden:YES withAnimation:UIStatusBarAnimationSlide];
+    if(![indexViewController isDisabled]) 
+        [indexViewController setIndexViewHidden:YES withAnimation:YES];
 }
 	
 	
@@ -1007,12 +1050,14 @@
 	[feedbackAlert release];
 }
 - (void)alertView:(UIAlertView *)alertView clickedButtonAtIndex:(NSInteger)buttonIndex {
-	
 	if (buttonIndex != alertView.cancelButtonIndex) {
-		if ([[alertView buttonTitleAtIndex:buttonIndex] isEqualToString:CLOSE_BOOK_CONFIRM])
+		if ([[alertView buttonTitleAtIndex:buttonIndex] isEqualToString:CLOSE_BOOK_CONFIRM]){
+            currentPageIsDelayingLoading = YES;
 			[self initBook:bundleBookPath];
-		else
+        }
+		else{
 			[self startDownloadRequest];
+        }
 	}
 }
 - (void)startDownloadRequest {
@@ -1106,6 +1151,9 @@
 	}	
 }
 - (void)willRotateToInterfaceOrientation:(UIInterfaceOrientation)toInterfaceOrientation duration:(NSTimeInterval)duration {
+    // Notify the index view
+    [indexViewController willRotate];
+    
     // Since the UIWebView doesn't handle orientationchange events correctly we have to do handle them ourselves 
     // 1. Set the correct value for window.orientation property
     NSString *jsOrientationGetter;
@@ -1137,6 +1185,9 @@
     [currPage stringByEvaluatingJavaScriptFromString:jsCommand];
 }
 - (void)didRotateFromInterfaceOrientation:(UIInterfaceOrientation)fromInterfaceOrientation {
+    UIDeviceOrientation orientation = [self interfaceOrientation];
+    [indexViewController rotateFromOrientation:fromInterfaceOrientation toOrientation:orientation];
+     
 	[self checkPageSize];
 	[self getPageHeight];
 	[self resetScrollView];
